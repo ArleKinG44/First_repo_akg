@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import re
+from collections import defaultdict
 
 # Функція для транслітерації й заміщення символів
 def normalize(name):
@@ -31,8 +32,7 @@ def sort_files(start_path):
         "Eny_trash": []
     }
 
-    known_extensions = set(val for sublist in extensions.values() for val in sublist)
-    found_extensions = {category: [] for category in extensions}
+    ext_counter = defaultdict(list)
 
     for root, dirs, files in os.walk(start_path):
         dirs[:] = [d for d in dirs if d not in extensions]
@@ -44,37 +44,64 @@ def sort_files(start_path):
             for category, exts in extensions.items():
                 if file_ext in exts:
                     shutil.move(os.path.join(root, file), os.path.join(start_path, category, file))
-                    found_extensions[category].append(file_ext)
                     moved = True
+                    ext_counter[category].append(file_ext)
                     break
 
             if not moved:
                 shutil.move(os.path.join(root, file), os.path.join(start_path, "Eny_trash", file))
-                found_extensions["Eny_trash"].append(file_ext)
+                ext_counter["Eny_trash"].append(file_ext)
 
-    unknown_extensions = set(val for sublist in found_extensions.values() for val in sublist) - known_extensions
+    known_exts = set()
+    unknown_exts = set()
 
-    print("Відомі розширення:", set(val for sublist in found_extensions.values() for val in sublist))
-    print("Невідомі розширення:", unknown_extensions)
+    for category, exts in ext_counter.items():
+        if category != "Eny_trash":
+            known_exts.update(set(exts))
+        else:
+            unknown_exts.update(set(exts))
 
-# Функція для обробки нових папок
-def sort_files_new(start_path):
-    folders = ["images", "video", "documents", "audio", "archives"]
+    print(f"Відомі розширення: {known_exts}")
+    print(f"Невідомі розширення: {unknown_exts}")
 
-    for folder in folders:
-        folder_path = os.path.join(start_path, folder)
-        for filename in os.listdir(folder_path):
-            old_file_path = os.path.join(folder_path, filename)
-            new_file_name = normalize(filename)
-            new_file_path = os.path.join(folder_path, new_file_name)
-            os.rename(old_file_path, new_file_path)
 
-        # Не виводимо файли в папці 'archives'
-        if folder != 'archives':
-            print(f"Файли в папці {folder}:")
-            for filename in os.listdir(folder_path):
-                print(filename)
+# функція для нормалізації файлів
+def process_files_norm(start_path):
+    categories = ["images", "video", "documents", "audio"]
+    all_files = {}
 
+    for root, dirs, files in os.walk(start_path):
+        dirs[:] = [d for d in dirs if d in categories]
+
+        for file in files:
+            filename, file_ext = os.path.splitext(file)
+            normalized_name = normalize(filename)
+            new_file = normalized_name + file_ext
+
+            # Check if a file with the same name already exists
+            if os.path.exists(os.path.join(root, new_file)):
+                i = 1
+                while os.path.exists(os.path.join(root, f"{normalized_name}_{i}{file_ext}")):
+                    i += 1
+                new_file = f"{normalized_name}_{i}{file_ext}"
+
+            shutil.move(os.path.join(root, file), os.path.join(root, new_file))
+
+            # Add the file to the list of files in its category
+            category = os.path.basename(root)
+            if category not in all_files:
+                all_files[category] = []
+            all_files[category].append(new_file)
+
+    # Print all files in each category
+    for category, files in all_files.items():
+        print(f"Category: {category}")
+        for file in files:
+            print(f"  {file}")
+
+
+
+def unpack_archives(start_path):
     archives_folder = os.path.join(start_path, 'archives')
     for filename in os.listdir(archives_folder):
         file_path = os.path.join(archives_folder, filename)
@@ -88,10 +115,24 @@ def sort_files_new(start_path):
 
 # Функція для видалення порожніх папок 
 def remove_empty_folders(path):
-    for dirpath, dirnames, files in os.walk(path, topdown=False):
-        if not dirnames and not files:
-            os.rmdir(dirpath)
+    # check if the path is a directory
+    if os.path.isdir(path):
+        # get the list of all files and folders in the path
+        contents = os.listdir(path)
+        # if the directory is empty, remove it
+        if not contents:
+            os.rmdir(path)         
+        else:
+            # if the directory is not empty, check all subdirectories
+            for item in contents:
+                full_path = os.path.join(path, item)
+                remove_empty_folders(full_path)
+            # after removing subdirectories, check if the directory has become empty
+            contents = os.listdir(path)
+            if not contents:
+                os.rmdir(path)
 
+                           
 def main():
 
     if len(sys.argv) == 2:
@@ -103,7 +144,8 @@ def main():
             os.makedirs(os.path.join(folder, subfolder), exist_ok=True)
 
         sort_files(folder)
-        sort_files_new(folder)
+        process_files_norm(folder)
+        unpack_archives(folder)
         remove_empty_folders(folder)
 
     else:
