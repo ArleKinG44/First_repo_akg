@@ -6,20 +6,19 @@ from collections import defaultdict
 
 # Функція для транслітерації й заміщення символів
 def normalize(name):
-
     CYRILLIC_SYMBOLS = "абвгдеёжзийклмнопрстуфхцчшщъыьэюяєіїґ"
     TRANSLATION = ("a", "b", "v", "g", "d", "e", "e", "j", "z", "i", "j", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u",
                "f", "h", "ts", "ch", "sh", "sch", "", "y", "", "e", "yu", "ya", "je", "i", "ji", "g")
-    
+
     TRANS = {ord(c.upper()): l.upper() for c, l in zip(CYRILLIC_SYMBOLS, TRANSLATION)}
     for c, l in zip(CYRILLIC_SYMBOLS, TRANSLATION):
         TRANS[ord(c)] = l
         TRANS[ord(c.upper())] = l.upper()
 
-        translate_name = "".join(TRANS.get(ord(c), c) for c in name.lower())
-        normalized_name = re.sub('[^a-zA-Z0-9]', '_', translate_name)
+    translate_name = "".join(TRANS.get(ord(c), c) for c in name)
+    normalized_name = re.sub('[^a-zA-Z0-9]', '_', translate_name)
 
-    return normalized_name.title()
+    return normalized_name
 
 # Функція сортування 
 def sort_files(start_path):
@@ -38,7 +37,7 @@ def sort_files(start_path):
         dirs[:] = [d for d in dirs if d not in extensions]
 
         for file in files:
-            file_ext = os.path.splitext(file)[-1]
+            file_ext = os.path.splitext(file)[-1].lower()  # перетворення розширення файлу на нижній регістр
             moved = False
 
             for category, exts in extensions.items():
@@ -65,6 +64,7 @@ def sort_files(start_path):
     print(f"Невідомі розширення: {unknown_exts}")
 
 
+
 # функція для нормалізації файлів
 def process_files_norm(start_path):
     categories = ["images", "video", "documents", "audio"]
@@ -78,7 +78,6 @@ def process_files_norm(start_path):
             normalized_name = normalize(filename)
             new_file = normalized_name + file_ext
 
-            # Check if a file with the same name already exists
             if os.path.exists(os.path.join(root, new_file)):
                 i = 1
                 while os.path.exists(os.path.join(root, f"{normalized_name}_{i}{file_ext}")):
@@ -87,13 +86,11 @@ def process_files_norm(start_path):
 
             shutil.move(os.path.join(root, file), os.path.join(root, new_file))
 
-            # Add the file to the list of files in its category
             category = os.path.basename(root)
             if category not in all_files:
                 all_files[category] = []
             all_files[category].append(new_file)
 
-    # Print all files in each category
     for category, files in all_files.items():
         print(f"Category: {category}")
         for file in files:
@@ -105,12 +102,15 @@ def unpack_archives(start_path):
     archives_folder = os.path.join(start_path, 'archives')
     for filename in os.listdir(archives_folder):
         file_path = os.path.join(archives_folder, filename)
+        new_folder_path = os.path.join(archives_folder, os.path.splitext(filename)[0])
+        os.makedirs(new_folder_path, exist_ok=True)
         try:
-            shutil.unpack_archive(file_path, archives_folder)
+            shutil.unpack_archive(file_path, new_folder_path)
             os.remove(file_path)
         except Exception as e:
             print(f"Не вдалося розпакувати файл {filename}. Помилка: {e}")
             os.remove(file_path)
+
 
 
 # Функція для видалення порожніх папок 
